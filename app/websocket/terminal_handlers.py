@@ -1,0 +1,107 @@
+"""
+WebSocket Handlers for Frontend Terminal Sessions
+"""
+import asyncio
+import logging
+from fastapi import WebSocket, WebSocketDisconnect
+from app.websocket.connection_manager import manager
+from app.services.terminal_service import terminal_service
+
+logger = logging.getLogger(__name__)
+
+
+async def handle_frontend_terminal(websocket: WebSocket, pc_id: str, session_id: str):
+    """Handle frontend terminal WebSocket connection"""
+    try:
+        await websocket.accept()
+        logger.info(f"[Frontend Terminal] Frontend connected for {pc_id} session {session_id}")
+        
+        # Verify session is active
+        if not terminal_service.is_session_active(session_id):
+            await websocket.send_json({
+                "type": "error",
+                "message": "Terminal session not active"
+            })
+            await websocket.close()
+            return
+        
+        # Store frontend connection for this session
+        frontend_terminal_connections[session_id] = websocket
+        
+        # Listen for messages from frontend
+        while True:
+            try:
+                data = await asyncio.wait_for(websocket.receive_json(), timeout=30.0)
+                message_type = data.get("type")
+                
+                if message_type == "command":
+                    # Frontend sends a command
+                    command = data.get("command", "")
+                    if command:
+                        # Send command to PC
+                        await manager.send_terminal_command(pc_id, session_id, command)
+                        logger.debug(f"[Frontend Terminal] Command sent: {command[:50]}")
+                
+                elif message_type == "interrupt":
+                    # Frontend sends Ctrl+C interrupt
+                    await manager.send_terminal_interrupt(pc_id, session_id)
+                    logger.debug(f"[Frontend Terminal] Interrupt sent for session {session_id}")
+                
+                elif message_type == "ping":
+                    # Heartbeat
+                    await websocket.send_json({"type": "pong"})
+                
+            except asyncio.TimeoutError:
+                # Send heartbeat
+                try:
+                    await websocket.send_json({"type": "ping"})
+                except:
+                    break
+            
+            except WebSocketDisconnect:
+                break
+            
+            except Exception as e:
+                logger.error(f"[Frontend Terminal] Error handling message: {e}")
+                break
+        
+        # Cleanup
+        if session_id in frontend_terminal_connections:
+            del frontend_terminal_connections[session_id]
+        
+        logger.info(f"[Frontend Terminal] Frontend disconnected for {pc_id} session {session_id}")
+        
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        logger.error(f"[Frontend Terminal] Error: {e}")
+
+
+# Store frontend connections globally
+frontend_terminal_connections = {}
+
+
+async def forward_terminal_output(pc_id: str, session_id: str, output: str, is_complete: bool = False):
+    """
+    Forward terminal output from PC to frontend
+    
+    Args:
+        pc_id: PC ID
+        session_id: Session ID
+        output: Terminal output
+        is_complete: Whether the command is complete
+    """
+    if session_id in frontend_terminal_connections:
+        websocket = frontend_terminal_connections[session_id]
+        try:
+            await websocket.send_json({
+                "type": "output",
+                "output": output,
+                "is_complete": is_complete
+            })
+        except Exception as e:
+            logger.error(f"[Frontend Terminal] Error forwarding output: {e}")
+            # Remove dead connection
+            if session_id in frontend_terminal_connections:
+                del frontend_terminal_connections[session_id]
+
