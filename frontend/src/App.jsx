@@ -18,12 +18,7 @@ function App() {
   return (
     <AuthProvider>
       <ToastProvider>
-        <Router
-          future={{
-            v7_startTransition: true,
-            v7_relativeSplatPath: true
-          }}
-        >
+        <Router>
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route

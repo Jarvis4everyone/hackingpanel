@@ -93,9 +93,9 @@ class Settings(BaseSettings):
     # Server Configuration
     APP_NAME: str = "Remote Script Server"
     APP_VERSION: str = "1.0.0"
-    HOST: str = "0.0.0.0"
-    PORT: int = 8000
-    DEBUG: bool = True
+    HOST: str = os.getenv("HOST", "0.0.0.0")
+    PORT: int = int(os.getenv("PORT", "8000"))
+    DEBUG: bool = os.getenv("DEBUG", "False").lower() == "true"
     
     # MongoDB Configuration
     MONGODB_URL: str = "mongodb://localhost:27017"
