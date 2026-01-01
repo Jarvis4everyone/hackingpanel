@@ -235,11 +235,24 @@ export const getTerminalSession = async (sessionId) => {
 
 // Auth API
 export const login = async (username, password) => {
-  const response = await api.post('/api/auth/login', {
-    username,
-    password
-  })
-  return response.data
+  console.log('[API] Login attempt:', { username, baseURL: api.defaults.baseURL })
+  try {
+    const response = await api.post('/api/auth/login', {
+      username,
+      password
+    })
+    console.log('[API] Login success:', response.data)
+    return response.data
+  } catch (error) {
+    console.error('[API] Login error:', error)
+    console.error('[API] Error details:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status,
+      config: error.config
+    })
+    throw error
+  }
 }
 
 export const logout = async () => {
